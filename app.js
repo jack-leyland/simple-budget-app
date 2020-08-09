@@ -4,7 +4,20 @@ var budgetController = (function() {
         this.id = id;
         this.desc = desc;
         this.val = val;
+        this.percentage = -1;
     }
+
+    Expense.prototype.calcPercentage = function(totalIncome) {
+        if (totalIncome > 0) {
+            this.percentage = Math.round((this.val / totalIncome) * 100);    
+        } else {
+            this.percentage = -1;
+        }
+    }
+
+    Expense.prototype.getPercentage = function() {
+        return this.percentage;
+    };
 
     var Income = function(id, desc, val) {
         this.id = id;
@@ -77,12 +90,25 @@ var budgetController = (function() {
 
             data.budget = data.totals.inc - data.totals.exp;
 
-            if(data.totals.inc > 0) {
+            if (data.totals.inc > 0) {
                 data.percentage = Math.round((data.totals.exp / data.totals.inc) * 100);
             } else {
                 data.percentage = -1;
             }
             
+        },
+
+        calcPercentages: function() {
+            data.allItems.exp.forEach(function(current){
+                current.calcPercentage(data.totals.inc);
+            })
+        },
+
+        getPercentages: function() {
+            var allPerc = data.allItems.exp.map(function(current){
+                return current.getPercentage();
+            })
+            return allPerc;
         },
 
         getBudget: function() {
@@ -114,9 +140,38 @@ var UIController = (function() {
         incLabel: '.budget__income--value',
         expLabel: '.budget__expenses--value',
         percentageLabel: '.budget__expenses--percentage',
-        container: '.container'
+        container: '.container',
+        expPercentageLabels: '.item__percentage',
+        dateLabel: '.budget__title--month',
+        typeInput: '.add__type'
     }
 
+    var formatNumber = function(num, type) {
+       
+        //the tutorial version of this function did not work for numbers with more than 6 digits so this 
+        //is the simplest way I could find to do it using what I currently know. Since nobody 
+        //in a different locale will be using this and the method is supported by most browsers
+        //I'm going to leave it until I learn a better way to do it with regex, or actually write
+        //the logic that iterates over a number and dynamically inserts the commas. This is just a 
+        //small Udemy course project that I am trying to get through so I know enough JS to start building
+        //my own project :)
+
+        var numSplit, dec, int;
+        
+        num = Math.abs(num);
+        num = num.toFixed(2);
+        numSplit = num.split('.');
+        int = parseInt(numSplit[0]).toLocaleString();
+        dec = numSplit[1];
+
+        return (type === 'exp' ? '-' : '+') + ' ' + int + '.' + dec;
+    };
+
+    var nodeListForEach = function(list, callback) {
+        for (var i = 0; i < list.length; i++) {
+            callback(list[i], i);
+        }
+    };
 
     return {
         getInput: function() {
@@ -146,7 +201,7 @@ var UIController = (function() {
             //replace placeholder text with actual data
             newHtml = html.replace('%id%', obj.id);
             newHtml = newHtml.replace('%desc%', obj.desc);
-            newHtml = newHtml.replace('%val%', obj.val);
+            newHtml = newHtml.replace('%val%', formatNumber(obj.val, type));
 
             //add the HTML to DOM
             document.querySelector(element).insertAdjacentHTML('beforeend', newHtml);
@@ -159,17 +214,44 @@ var UIController = (function() {
         },
 
         displayBudget: function(obj) {
+            var type;
+            obj.budget >= 0 ? type = 'inc' : type = 'exp';
             
-            document.querySelector(DOMstrings.budgetLabel).textContent = obj.budget;
-            document.querySelector(DOMstrings.incLabel).textContent = '+ ' + obj.totalInc;
-            document.querySelector(DOMstrings.expLabel).textContent = '- ' + obj.totalExp;
+            document.querySelector(DOMstrings.budgetLabel).textContent = formatNumber(obj.budget,type);
+            document.querySelector(DOMstrings.incLabel).textContent = formatNumber(obj.totalInc, 'inc');
+            document.querySelector(DOMstrings.expLabel).textContent = formatNumber(obj.totalExp, 'exp');
 
             if (obj.percentage > 0 ) {
-                document.querySelector(DOMstrings.percentageLabel).textContent = obj.percentage + ' %';
+                document.querySelector(DOMstrings.percentageLabel).textContent = obj.percentage + '%';
             } else {
                 document.querySelector(DOMstrings.percentageLabel).textContent = '- %';
             }
             
+        },
+
+        displayPercentages: function(percentages) {
+            var fields = document.querySelectorAll(DOMstrings.expPercentageLabels);
+            
+            nodeListForEach(fields, function(current, index) {
+                if (percentages[index] > 0) {
+                    current.textContent = percentages[index] + '%';
+                } else {
+                    current.textContent = '-%';
+                }
+            });
+        }, 
+
+        displayMonth: function() {
+            var now, year, month, months;
+            
+            months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                        'August', 'September', 'October', 'November', 'December'];
+            now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+
+            document.querySelector(DOMstrings.dateLabel).textContent = months[month] + ' ' + year;
+
         },
 
         clearFields: function() {
@@ -185,6 +267,26 @@ var UIController = (function() {
 
             fieldsArr[0].focus();
 
+        },
+
+        changeType: function() {
+            var inputFields
+            inputFields = document.querySelectorAll(
+                            DOMstrings.inputType + ',' +
+                            DOMstrings.inputDesc + ',' +
+                            DOMstrings.inputVal 
+                            );
+
+            nodeListForEach(inputFields, function(cur) {
+                cur.classList.toggle('red-focus');
+            });
+
+            document.querySelector(DOMstrings.inputBtn).classList.toggle('red');
+        },
+
+        defaultInputSettings: function() {
+            document.querySelector(DOMstrings.inputDesc).value = '';
+            document.querySelector(DOMstrings.inputVal).value = '';
         },
 
         getDOMstrings: function() {
@@ -210,36 +312,31 @@ var controller = (function(budgetCtrl, UICtrl) {
         });
 
         document.querySelector(DOM.container).addEventListener('click', ctrlDeleteItem);
+
+        document.querySelector(DOM.typeInput).addEventListener('change', UICtrl.changeType);
     };
 
     var updateBudget = function() {
-        //calc budget
         budgetCtrl.calcBudget();
-
-        //return budget
         var budget = budgetCtrl.getBudget();
-        
-        //display budget
         UICtrl.displayBudget(budget);
+    };
+
+    var updatePercentages = function() {
+        budgetCtrl.calcPercentages();
+        var percentages = budgetCtrl.getPercentages();
+        UICtrl.displayPercentages(percentages);
     };
 
     var ctrlAddItem = function() {
         var input, newItem, data;
-
-        // get field input data, add item to budget back end, display item on UI, calculate and update budget
-
         input = UICtrl.getInput();
-
         if (input.desc !== "" && !isNaN(input.val) && input.val > 0 ) {
-
             newItem = budgetCtrl.addItem(input.type, input.desc, input.val);
-
             UICtrl.addListItem(newItem, input.type);
-    
             UICtrl.clearFields();
-    
             updateBudget();
-
+            updatePercentages();
         };
     };
 
@@ -255,12 +352,15 @@ var controller = (function(budgetCtrl, UICtrl) {
             budgetCtrl.deleteItem(type, ID);
             UICtrl.deleteListItem(itemID);
             updateBudget();
+            updatePercentages();
         };
     };
 
     return {
         init: function() {
             setupEventListeners();
+            UICtrl.defaultInputSettings();
+            UICtrl.displayMonth();
             UICtrl.displayBudget({
                 budget: 0,
                 totalInc: 0,
