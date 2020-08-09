@@ -1,0 +1,3 @@
+# Simple Budget App
+
+This is avery basic budget app built as a project for the Udemy JS course I am taking. Mainly saving it here for posterity and so that I have an ongoing record of my learning process. I didn't add a great deal of my own code to the project, unlike with the previous asteroids project, my goal with these is to get enough of a foundation to start work on an entirely personal project. I did rewrite the number formatting function to work for numbers with more than 6 digits and added a method to reset the input field on refresh as the course version of the app did not have the desired behavior in firefox. 
